@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 )
 
@@ -35,6 +36,33 @@ func (sc *SchemaSync) GetNewTableNames() []string {
 		}
 	}
 	return newTables
+}
+
+// 数据库db是否存在,新增或删除
+func (sc *SchemaSync) GetDatabase(config *Config) {
+	//获取建db库sql语句
+	sourceSql := sc.SourceDb.GetDatabase()
+	descSql := sc.DestDb.GetDatabase()
+
+	//如果db库已经被删除
+	if len(sourceSql) == 0 && len(descSql) != 0 {
+		//执行删除db语句
+		sc.SyncSQL4Dest("drop database "+sc.DestDb.dbName, nil)
+		//手动抛出异常
+		panic("drop database " + sc.DestDb.dbName + " ok")
+	}
+	//如果db库是新增
+	if len(sourceSql) != 0 && len(descSql) == 0 {
+		//重新连接 mysql 系统数据库,用于创建新db库
+		sc.DestDb = NewMyDb(strings.Replace(config.DestDSN, sc.DestDb.dbName, "mysql", -1), "dest")
+		//执行创建db语句
+		err := sc.SyncSQL4Dest(sourceSql, nil)
+		if err != nil {
+			panic("drop database " + sc.DestDb.dbName + " ok")
+		}
+		//创建成功后,改回默认数据库
+		sc.DestDb = NewMyDb(config.DestDSN, "dest")
+	}
 }
 
 // 合并源数据库和目标数据库的表名
@@ -85,6 +113,21 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config) *TableAlter
 	if len(diff) == 0 {
 		return alter
 	}
+
+	//针对 NOT NULL DEFAULT 情况,需要先update数据才行
+	var diffn []string
+	for _, s := range diff {
+		if strings.Contains(s, "NOT NULL DEFAULT") {
+			//diffn = append(diffn, fmt.Sprintf("UPDATE ys_asset.zc_machine set asset_level = 0 WHERE asset_level is null;"))
+			key := regexp.MustCompile("`.*?`").FindString(s)
+			log.Printf("%s\n", key)
+			log.Printf("%s\n", s)
+			log.Printf("UPDATE %s set %s = 0 WHERE %s is null;\n", table, key, key)
+		}
+		diffn = append(diffn, s)
+	}
+	diff = diffn
+
 	alter.Type = alterTypeAlter
 	if cfg.SingleSchemaChange {
 		for _, diffSql := range diff {
@@ -301,7 +344,11 @@ func CheckSchemaDiff(cfg *Config) {
 		scs.sendMailNotice(cfg)
 	}()
 
+	//连接数据库
 	sc := NewSchemaSync(cfg)
+	//获取db状态,判断是否存在
+	sc.GetDatabase(cfg)
+
 	newTables := sc.GetTableNames()
 	// log.Println("source db table total:", len(newTables))
 

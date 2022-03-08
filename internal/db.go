@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 )
@@ -12,6 +13,7 @@ import (
 type MyDb struct {
 	Db     *sql.DB
 	dbType string
+	dbName string
 }
 
 // NewMyDb parse dsn
@@ -23,7 +25,25 @@ func NewMyDb(dsn string, dbType string) *MyDb {
 	return &MyDb{
 		Db:     db,
 		dbType: dbType,
+		dbName: strings.Split(dsn, "/")[1],
 	}
+}
+
+// 获取database创建sql语句
+func (db *MyDb) GetDatabase() (schema string) {
+	rs, err := db.Query("show create database " + db.dbName)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer rs.Close()
+	for rs.Next() {
+		var vname string
+		if err := rs.Scan(&vname, &schema); err != nil {
+			panic(fmt.Sprintf("get table %s 's schema failed, %s", db.dbName, err))
+		}
+	}
+	return
 }
 
 // GetTableNames table names
@@ -57,9 +77,10 @@ func (db *MyDb) GetTableNames() []string {
 			}
 			valObj[col] = v
 		}
-		if valObj["Engine"] != nil {
-			tables = append(tables, valObj["Name"].(string))
-		}
+		//是否是表table
+		//if valObj["Engine"] != nil {
+		tables = append(tables, valObj["Name"].(string))
+		//}
 	}
 	return tables
 }
@@ -74,8 +95,12 @@ func (db *MyDb) GetTableSchema(name string) (schema string) {
 	defer rs.Close()
 	for rs.Next() {
 		var vname string
+		//如果是表table
 		if err := rs.Scan(&vname, &schema); err != nil {
-			panic(fmt.Sprintf("get table %s 's schema failed, %s", name, err))
+			//如果是视图view
+			if err := rs.Scan(&vname, &schema, &vname, &vname); err != nil {
+				panic(fmt.Sprintf("get table %s 's schema failed, %s", name, err))
+			}
 		}
 	}
 	return
