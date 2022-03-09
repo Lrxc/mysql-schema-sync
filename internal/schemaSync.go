@@ -25,8 +25,8 @@ func NewSchemaSync(config *Config) *SchemaSync {
 
 // GetNewTableNames 获取所有新增加的表名
 func (sc *SchemaSync) GetNewTableNames() []string {
-	sourceTables := sc.SourceDb.GetTableNames()
-	destTables := sc.DestDb.GetTableNames()
+	sourceTables := sc.SourceDb.GetTableNames(TYPE_TABLE)
+	destTables := sc.DestDb.GetTableNames(TYPE_TABLE)
 
 	var newTables []string
 
@@ -66,9 +66,9 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 }
 
 // 合并源数据库和目标数据库的表名
-func (sc *SchemaSync) GetTableNames() []string {
-	sourceTables := sc.SourceDb.GetTableNames()
-	destTables := sc.DestDb.GetTableNames()
+func (sc *SchemaSync) GetTableNames(tType string) []string {
+	sourceTables := sc.SourceDb.GetTableNames(tType)
+	destTables := sc.DestDb.GetTableNames(tType)
 	var tables []string
 	tables = append(tables, destTables...)
 	for _, name := range sourceTables {
@@ -84,13 +84,13 @@ func RemoveTableSchemaConfig(schema string) string {
 	return strings.Split(schema, "ENGINE")[0]
 }
 
-func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config) *TableAlterData {
+func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config, tType string) *TableAlterData {
 	alter := new(TableAlterData)
 	alter.Table = table
 	alter.Type = alterTypeNo
 
-	sSchema := sc.SourceDb.GetTableSchema(table)
-	dSchema := sc.DestDb.GetTableSchema(table)
+	sSchema := sc.SourceDb.GetTableSchema(table, tType)
+	dSchema := sc.DestDb.GetTableSchema(table, tType)
 	alter.SchemaDiff = newSchemaDiff(table, RemoveTableSchemaConfig(sSchema), RemoveTableSchemaConfig(dSchema))
 
 	if sSchema == dSchema {
@@ -99,12 +99,20 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config) *TableAlter
 	if sSchema == "" {
 		alter.Type = alterTypeDropTable
 		alter.Comment = "源数据库不存在，删除目标数据库多余的表"
-		alter.SQL = append(alter.SQL, fmt.Sprintf("drop table `%s`;", table))
+		alter.SQL = append(alter.SQL, fmt.Sprintf("drop table `%s`.`%s`;", sc.DestDb.dbName, table))
 		return alter
 	}
 	if dSchema == "" {
 		alter.Type = alterTypeCreate
 		alter.Comment = "目标数据库不存在，创建"
+		//先删除同名的表或视图
+		if tType == TYPE_TABLE {
+			alter.SQL = append(alter.SQL, fmt.Sprintf("DROP VIEW IF EXISTS `%s`.`%s`;", sc.DestDb.dbName, table))
+		} else {
+			alter.SQL = append(alter.SQL, fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`;", sc.DestDb.dbName, table))
+		}
+		//添加database名称
+		sSchema = strings.Replace(sSchema, "`"+table+"`", sc.DestDb.dbName+".`"+table+"`", -1)
 		alter.SQL = append(alter.SQL, sSchema+";")
 		return alter
 	}
@@ -328,8 +336,7 @@ func (sc *SchemaSync) SyncSQL4Dest(sqlStr string, sqls []string) error {
 	return err
 }
 
-// CheckSchemaDiff 执行最终的diff
-func CheckSchemaDiff(cfg *Config) {
+func CheckSchemaDiffStart(cfg *Config) {
 	scs := newStatics(cfg)
 	defer func() {
 		scs.timer.stop()
@@ -341,7 +348,16 @@ func CheckSchemaDiff(cfg *Config) {
 	//获取db状态,判断是否存在
 	sc.GetDatabase(cfg)
 
-	newTables := sc.GetTableNames()
+	//对比表[table]
+	CheckSchemaDiff(scs, cfg, sc, TYPE_TABLE)
+	//对比视图[view]
+	CheckSchemaDiff(scs, cfg, sc, TYPE_VIEW)
+}
+
+// CheckSchemaDiff 执行最终的diff
+func CheckSchemaDiff(scs *statics, cfg *Config, sc *SchemaSync, tType string) {
+
+	newTables := sc.GetTableNames(tType)
 	// log.Println("source db table total:", len(newTables))
 
 	changedTables := make(map[string][]*TableAlterData)
@@ -358,7 +374,7 @@ func CheckSchemaDiff(cfg *Config) {
 			continue
 		}
 
-		sd := sc.getAlterDataByTable(table, cfg)
+		sd := sc.getAlterDataByTable(table, cfg, tType)
 
 		if sd.Type == alterTypeNo {
 			//log.Println("table:", table, "not change,", sd)
@@ -371,6 +387,7 @@ func CheckSchemaDiff(cfg *Config) {
 			continue
 		}
 
+		//打印sql
 		fmt.Println(sd)
 		fmt.Println("")
 		relationTables := sd.SchemaDiff.RelationTables()
@@ -387,7 +404,7 @@ func CheckSchemaDiff(cfg *Config) {
 		changedTables[groupKey] = append(changedTables[groupKey], sd)
 	}
 
-	log.Println("[Debug] changedTables:", changedTables)
+	//log.Println("[Debug] changedTables:", changedTables)
 
 	countSuccess := 0
 	countFailed := 0
@@ -425,7 +442,7 @@ run_sync:
 		}
 		for _, st := range sts {
 			st.alterRet = ret
-			st.schemaAfter = sc.DestDb.GetTableSchema(st.table)
+			st.schemaAfter = sc.DestDb.GetTableSchema(st.table, tType)
 			st.timer.stop()
 		}
 

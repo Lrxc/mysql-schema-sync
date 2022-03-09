@@ -4,9 +4,15 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql" // mysql driver
+)
+
+const (
+	TYPE_VIEW  string = "view"
+	TYPE_TABLE string = "table"
 )
 
 // MyDb db struct
@@ -47,7 +53,7 @@ func (db *MyDb) GetDatabase() (schema string) {
 }
 
 // GetTableNames table names
-func (db *MyDb) GetTableNames() []string {
+func (db *MyDb) GetTableNames(tType string) []string {
 	rs, err := db.Query("show table status")
 	if err != nil {
 		panic("show tables failed:" + err.Error())
@@ -77,16 +83,20 @@ func (db *MyDb) GetTableNames() []string {
 			}
 			valObj[col] = v
 		}
-		//是否是表table
-		//if valObj["Engine"] != nil {
-		tables = append(tables, valObj["Name"].(string))
-		//}
+		//表table
+		if tType == TYPE_TABLE && valObj["Engine"] != nil {
+			tables = append(tables, valObj["Name"].(string))
+		}
+		//视图view
+		if tType == TYPE_VIEW {
+			tables = append(tables, valObj["Name"].(string))
+		}
 	}
 	return tables
 }
 
 // GetTableSchema table schema
-func (db *MyDb) GetTableSchema(name string) (schema string) {
+func (db *MyDb) GetTableSchema(name string, tType string) (schema string) {
 	rs, err := db.Query(fmt.Sprintf("show create table `%s`", name))
 	if err != nil {
 		log.Println(err)
@@ -95,11 +105,24 @@ func (db *MyDb) GetTableSchema(name string) (schema string) {
 	defer rs.Close()
 	for rs.Next() {
 		var vname string
-		//如果是表table
-		if err := rs.Scan(&vname, &schema); err != nil {
-			//如果是视图view
+		//如果是表[table]
+		if tType == TYPE_TABLE {
+			if err := rs.Scan(&vname, &schema); err != nil {
+				//如果是解析参数个数错误,则返回空
+				matched, _ := regexp.MatchString("sql: expected .* destination arguments in Scan, not .*", err.Error())
+				if !matched {
+					panic(fmt.Sprintf("get table %s 's schema failed, %s", name, err))
+				}
+			}
+		}
+		//如果是视图[view]
+		if tType == TYPE_VIEW {
 			if err := rs.Scan(&vname, &schema, &vname, &vname); err != nil {
-				panic(fmt.Sprintf("get table %s 's schema failed, %s", name, err))
+				//如果是解析参数个数错误,则返回空
+				matched, _ := regexp.MatchString("sql: expected .* destination arguments in Scan, not .*", err.Error())
+				if !matched {
+					panic(fmt.Sprintf("get table %s 's schema failed, %s", name, err))
+				}
 			}
 		}
 	}
@@ -108,6 +131,6 @@ func (db *MyDb) GetTableSchema(name string) (schema string) {
 
 // Query execute sql query
 func (db *MyDb) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	log.Println("[SQL]", "["+db.dbType+"]", query, args)
+	//log.Println("[SQL]", "["+db.dbType+"]", query, args)
 	return db.Db.Query(query, args...)
 }
