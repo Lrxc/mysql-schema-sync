@@ -125,19 +125,27 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config, tType strin
 	alter.Type = alterTypeAlter
 	if cfg.SingleSchemaChange {
 		for _, diffSql := range diff {
-			//针对 NOT NULL DEFAULT 情况,需要先update数据才行
-			matched, _ := regexp.MatchString("CHANGE .* NOT NULL DEFAULT .*", diffSql)
-			if matched {
-				key := regexp.MustCompile("`.*?`").FindString(diffSql)
-				alter.SQL = append(alter.SQL, fmt.Sprintf("UPDATE `%s`.`%s`\nSET %s = 0 WHERE %s IS NULL;", sc.DestDb.dbName, table, key, key))
-			}
+			alter.SQL = append(alter.SQL, addUpdate(sc.DestDb.dbName, table, diffSql))
 			alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`.`%s`\n%s;", sc.DestDb.dbName, table, diffSql))
 		}
 	} else {
+		alter.SQL = append(alter.SQL, addUpdate(sc.DestDb.dbName, table, strings.Join(diff, ",\n")))
 		alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`.`%s`\n%s;", sc.DestDb.dbName, table, strings.Join(diff, ",\n")))
 	}
-
 	return alter
+}
+
+//针对 NOT NULL DEFAULT 情况,需要先update数据才行
+func addUpdate(dbName string, table string, sql string) (upSql string) {
+	//是否包含特定内容
+	matched, _ := regexp.MatchString("CHANGE .* NOT NULL DEFAULT .*", sql)
+	if matched {
+		//获取字段名
+		key := regexp.MustCompile("`.*?`").FindString(sql)
+		//update语句
+		upSql = fmt.Sprintf("UPDATE `%s`.`%s`\nSET %s = 0 WHERE %s IS NULL;", dbName, table, key, key)
+	}
+	return
 }
 
 func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {

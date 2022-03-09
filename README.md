@@ -23,7 +23,7 @@ MySQL Schema 自动同步工具
 #linux
 set GOARCH=amd64
 set GOOS=linux
-go build main.go
+go build -o mysql-schema-sync main.go
 ```
 
 ### 安装
