@@ -114,27 +114,19 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config) *TableAlter
 		return alter
 	}
 
-	//针对 NOT NULL DEFAULT 情况,需要先update数据才行
-	var diffn []string
-	for _, s := range diff {
-		if strings.Contains(s, "NOT NULL DEFAULT") {
-			//diffn = append(diffn, fmt.Sprintf("UPDATE ys_asset.zc_machine set asset_level = 0 WHERE asset_level is null;"))
-			key := regexp.MustCompile("`.*?`").FindString(s)
-			log.Printf("%s\n", key)
-			log.Printf("%s\n", s)
-			log.Printf("UPDATE %s set %s = 0 WHERE %s is null;\n", table, key, key)
-		}
-		diffn = append(diffn, s)
-	}
-	diff = diffn
-
 	alter.Type = alterTypeAlter
 	if cfg.SingleSchemaChange {
 		for _, diffSql := range diff {
-			alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`\n%s;", table, diffSql))
+			//针对 NOT NULL DEFAULT 情况,需要先update数据才行
+			matched, _ := regexp.MatchString("CHANGE .* NOT NULL DEFAULT .*", diffSql)
+			if matched {
+				key := regexp.MustCompile("`.*?`").FindString(diffSql)
+				alter.SQL = append(alter.SQL, fmt.Sprintf("UPDATE `%s`.`%s`\nSET %s = 0 WHERE %s IS NULL;", sc.DestDb.dbName, table, key, key))
+			}
+			alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`.`%s`\n%s;", sc.DestDb.dbName, table, diffSql))
 		}
 	} else {
-		alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`\n%s;", table, strings.Join(diff, ",\n")))
+		alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`.`%s`\n%s;", sc.DestDb.dbName, table, strings.Join(diff, ",\n")))
 	}
 
 	return alter
@@ -369,7 +361,8 @@ func CheckSchemaDiff(cfg *Config) {
 		sd := sc.getAlterDataByTable(table, cfg)
 
 		if sd.Type == alterTypeNo {
-			log.Println("table:", table, "not change,", sd)
+			//log.Println("table:", table, "not change,", sd)
+			log.Println("table:", table, "not change")
 			continue
 		}
 
