@@ -46,19 +46,24 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 
 	//如果db库已经被删除
 	if len(sourceSql) == 0 && len(descSql) != 0 {
+		sql := "DROP DATABASE IF EXISTS " + sc.DestDb.dbName
+		fmt.Println("-- Create Database")
+		fmt.Printf("%s;\n\n", sql)
 		//执行删除db语句
-		sc.SyncSQL4Dest("drop database "+sc.DestDb.dbName, nil)
-		//手动抛出异常
+		sc.SyncSQL4Dest(sql, nil)
+		//手动抛出异常,结束流程
 		panic("drop database " + sc.DestDb.dbName + " ok")
 	}
 	//如果db库是新增
 	if len(sourceSql) != 0 && len(descSql) == 0 {
 		//重新连接 mysql 系统数据库,用于创建新db库
 		sc.DestDb = NewMyDb(strings.Replace(config.DestDSN, sc.DestDb.dbName, "mysql", -1), "dest")
+		fmt.Println("-- Create Database")
+		fmt.Printf("%s;\n\n", sourceSql)
 		//执行创建db语句
 		err := sc.SyncSQL4Dest(sourceSql, nil)
 		if err != nil {
-			panic("drop database " + sc.DestDb.dbName + " ok")
+			panic("drop database " + sc.DestDb.dbName + " error")
 		}
 		//创建成功后,改回默认数据库
 		sc.DestDb = NewMyDb(config.DestDSN, "dest")
@@ -99,7 +104,7 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config, tType strin
 	if sSchema == "" {
 		alter.Type = alterTypeDropTable
 		alter.Comment = "源数据库不存在，删除目标数据库多余的表"
-		alter.SQL = append(alter.SQL, fmt.Sprintf("drop table `%s`.`%s`;", sc.DestDb.dbName, table))
+		alter.SQL = append(alter.SQL, fmt.Sprintf("drop table `%s`;", table))
 		return alter
 	}
 	if dSchema == "" {
@@ -107,12 +112,10 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config, tType strin
 		alter.Comment = "目标数据库不存在，创建"
 		//先删除同名的表或视图
 		if tType == TYPE_TABLE {
-			alter.SQL = append(alter.SQL, fmt.Sprintf("DROP VIEW IF EXISTS `%s`.`%s`;", sc.DestDb.dbName, table))
+			alter.SQL = append(alter.SQL, fmt.Sprintf("DROP VIEW IF EXISTS `%s`;", table))
 		} else {
-			alter.SQL = append(alter.SQL, fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`;", sc.DestDb.dbName, table))
+			alter.SQL = append(alter.SQL, fmt.Sprintf("DROP TABLE IF EXISTS `%s`;", table))
 		}
-		//添加database名称
-		sSchema = strings.Replace(sSchema, "`"+table+"`", sc.DestDb.dbName+".`"+table+"`", -1)
 		alter.SQL = append(alter.SQL, sSchema+";")
 		return alter
 	}
@@ -125,12 +128,18 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config, tType strin
 	alter.Type = alterTypeAlter
 	if cfg.SingleSchemaChange {
 		for _, diffSql := range diff {
-			alter.SQL = append(alter.SQL, addUpdate(sc.DestDb.dbName, table, diffSql))
-			alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`.`%s`\n%s;", sc.DestDb.dbName, table, diffSql))
+			upsql := addUpdate(sc.DestDb.dbName, table, diffSql)
+			if upsql != "" {
+				alter.SQL = append(alter.SQL, upsql)
+			}
+			alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`\n%s;", table, diffSql))
 		}
 	} else {
-		alter.SQL = append(alter.SQL, addUpdate(sc.DestDb.dbName, table, strings.Join(diff, ",\n")))
-		alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`.`%s`\n%s;", sc.DestDb.dbName, table, strings.Join(diff, ",\n")))
+		upsql := addUpdate(sc.DestDb.dbName, table, strings.Join(diff, ",\n"))
+		if upsql != "" {
+			alter.SQL = append(alter.SQL, upsql)
+		}
+		alter.SQL = append(alter.SQL, fmt.Sprintf("ALTER TABLE `%s`\n%s;", table, strings.Join(diff, ",\n")))
 	}
 	return alter
 }
@@ -143,7 +152,7 @@ func addUpdate(dbName string, table string, sql string) (upSql string) {
 		//获取字段名
 		key := regexp.MustCompile("`.*?`").FindString(sql)
 		//update语句
-		upSql = fmt.Sprintf("UPDATE `%s`.`%s`\nSET %s = 0 WHERE %s IS NULL;", dbName, table, key, key)
+		upSql = fmt.Sprintf("UPDATE `%s`\nSET %s = 0 WHERE %s IS NULL;", table, key, key)
 	}
 	return
 }
@@ -356,6 +365,10 @@ func CheckSchemaDiffStart(cfg *Config) {
 	//获取db状态,判断是否存在
 	sc.GetDatabase(cfg)
 
+	//生成的sql文件中,开始位置添加database名称
+	fmt.Println("-- Database")
+	fmt.Printf("use `%s`;\n", sc.DestDb.dbName)
+
 	//对比表[table]
 	CheckSchemaDiff(scs, cfg, sc, TYPE_TABLE)
 	//对比视图[view]
@@ -394,6 +407,14 @@ func CheckSchemaDiff(scs *statics, cfg *Config, sc *SchemaSync, tType string) {
 			log.Println("skipped table", table, ",only exists in dest's db")
 			continue
 		}
+
+		//sql中添加database名称
+		var sqls []string
+		for _, sql := range sd.SQL {
+			sql := strings.Replace(sql, "`"+table+"`", sc.DestDb.dbName+".`"+table+"`", -1)
+			sqls = append(sqls, sql)
+		}
+		sd.SQL = sqls
 
 		//打印sql
 		fmt.Println(sd)

@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	TYPE_VIEW  string = "view"
+	//表
 	TYPE_TABLE string = "table"
+	//视图
+	TYPE_VIEW string = "view"
 )
 
 // MyDb db struct
