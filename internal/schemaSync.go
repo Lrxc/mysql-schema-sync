@@ -58,12 +58,14 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 	if len(sourceSql) != 0 && len(descSql) == 0 {
 		//重新连接 mysql 系统数据库,用于创建新db库
 		sc.DestDb = NewMyDb(strings.Replace(config.DestDSN, sc.DestDb.dbName, "mysql", -1), "dest")
+
+		sourceSql = strings.Replace(sourceSql, "CREATE DATABASE", "CREATE DATABASE IF NOT EXISTS", -1)
 		fmt.Println("-- Create Database")
 		fmt.Printf("%s;\n\n", sourceSql)
 		//执行创建db语句
 		err := sc.SyncSQL4Dest(sourceSql, nil)
 		if err != nil {
-			panic("drop database " + sc.DestDb.dbName + " error")
+			panic("create database " + sc.DestDb.dbName + " error")
 		}
 		//创建成功后,改回默认数据库
 		sc.DestDb = NewMyDb(config.DestDSN, "dest")
