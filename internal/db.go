@@ -3,7 +3,7 @@ package internal
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	logm "github.com/hidu/mysql-schema-sync/internal/logm/logm"
 	"regexp"
 	"strings"
 
@@ -41,7 +41,7 @@ func NewMyDb(dsn string, dbType string) *MyDb {
 func (db *MyDb) GetDatabase() (schema string) {
 	rs, err := db.Query("show create database " + db.dbName)
 	if err != nil {
-		log.Println(err)
+		logm.Println(err)
 		return
 	}
 	defer rs.Close()
@@ -90,7 +90,7 @@ func (db *MyDb) GetTableNames(tType string) []string {
 			tables = append(tables, valObj["Name"].(string))
 		}
 		//视图view
-		if tType == TYPE_VIEW {
+		if tType == TYPE_VIEW && valObj["Engine"] == nil {
 			tables = append(tables, valObj["Name"].(string))
 		}
 	}
@@ -101,7 +101,7 @@ func (db *MyDb) GetTableNames(tType string) []string {
 func (db *MyDb) GetTableSchema(name string, tType string) (schema string) {
 	rs, err := db.Query(fmt.Sprintf("show create table `%s`", name))
 	if err != nil {
-		log.Println(err)
+		logm.Println(err)
 		return
 	}
 	defer rs.Close()

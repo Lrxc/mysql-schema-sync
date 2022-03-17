@@ -37,7 +37,7 @@ const tableStyle = `
 // SendMail send mail
 func (m *EmailStruct) SendMail(title string, body string) {
 	if !m.SendMailAble {
-		log.Println("send email : no")
+		//log.Println("send email : no")
 		return
 	}
 	if m.SMTPHost == "" || m.From == "" || m.To == "" {

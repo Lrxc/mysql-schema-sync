@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	logm "github.com/hidu/mysql-schema-sync/internal/logm"
 	"log"
 	"os"
 	"strings"
@@ -20,6 +21,7 @@ var tables = flag.String("tables", "", "tables to sync\neg : product_base,order_
 var tablesIGNORE = flag.String("tables_ignore", "", "tables ignore sync\neg : product_base,order_*")
 var mailTo = flag.String("mail_to", "", "overwrite config's email.to")
 var singleSchemaChange = flag.Bool("single_schema_change", false, "single schema changes ddl command a single schema change")
+var outpath = flag.String("outpath", "output.sql", "output sql to file path")
 
 func init() {
 	log.SetFlags(log.Lshortfile | log.Ldate)
@@ -82,6 +84,9 @@ func main() {
 			log.Fatalln("exit")
 		}
 	})()
+
+	//调用方法,传参
+	logm.Init(*outpath)
 
 	cfg.Check()
 	internal.CheckSchemaDiffStart(cfg)
