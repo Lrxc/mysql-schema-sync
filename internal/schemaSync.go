@@ -2,8 +2,6 @@ package internal
 
 import (
 	"fmt"
-	fmtm "github.com/hidu/mysql-schema-sync/internal/logm/fmtm"
-	logm "github.com/hidu/mysql-schema-sync/internal/logm/logm"
 	"log"
 	"regexp"
 	"strings"
@@ -49,8 +47,8 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 	//如果db库已经被删除
 	if len(sourceSql) == 0 && len(descSql) != 0 {
 		sql := "DROP DATABASE IF EXISTS " + sc.DestDb.dbName
-		fmtm.Println("-- 删除 Database")
-		fmtm.Println(sql + ";")
+		fmt.Println("-- Create Database")
+		fmt.Printf("%s;\n\n", sql)
 		//执行删除db语句
 		sc.SyncSQL4Dest(sql, nil)
 		//手动抛出异常,结束流程
@@ -62,8 +60,8 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 		sc.DestDb = NewMyDb(strings.Replace(config.DestDSN, sc.DestDb.dbName, "mysql", -1), "dest")
 
 		sourceSql = strings.Replace(sourceSql, "CREATE DATABASE", "CREATE DATABASE IF NOT EXISTS", -1)
-		fmtm.Println("-- 创建 Database")
-		fmtm.Println(sourceSql + ";")
+		fmt.Println("-- Create Database")
+		fmt.Printf("%s;\n\n", sourceSql)
 		//执行创建db语句
 		err := sc.SyncSQL4Dest(sourceSql, nil)
 		if err != nil {
@@ -130,7 +128,6 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config, tType strin
 	}
 
 	alter.Type = alterTypeAlter
-	alter.Comment = "表结构修改"
 	if cfg.SingleSchemaChange {
 		for _, diffSql := range diff {
 			upsql := addUpdate(sc.DestDb.dbName, table, diffSql)
@@ -196,7 +193,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 		}
 
 		if alterSQL != "" {
-			logm.Println("[Debug] check column.alter ", fmt.Sprintf("%s.%s", table, el.Key.(string)), "alterSQL=", alterSQL)
+			log.Println("[Debug] check column.alter ", fmt.Sprintf("%s.%s", table, el.Key.(string)), "alterSQL=", alterSQL)
 			alterLines = append(alterLines, alterSQL)
 		} else {
 			log.Println("[Debug] check column.alter ", fmt.Sprintf("%s.%s", table, el.Key.(string)), "not change")
@@ -214,7 +211,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 			if _, has := sourceMyS.Fields.Get(name); !has {
 				alterSQL := fmt.Sprintf("drop `%s`", name)
 				alterLines = append(alterLines, alterSQL)
-				logm.Println("[Debug] check column.drop ", fmt.Sprintf("%s.%s", table, name), "alterSQL=", alterSQL)
+				log.Println("[Debug] check column.drop ", fmt.Sprintf("%s.%s", table, name), "alterSQL=", alterSQL)
 			} else {
 				log.Println("[Debug] check column.drop ", fmt.Sprintf("%s.%s", table, name), "not change")
 			}
@@ -230,7 +227,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 			continue
 		}
 		dIdx, has := destMyS.IndexAll[indexName]
-		//logm.Println("[Debug] indexName---->[", fmt.Sprintf("%s.%s", table, indexName), "] dest_has:", has, "\ndest_idx:", dIdx, "\nsource_idx:", idx)
+		log.Println("[Debug] indexName---->[", fmt.Sprintf("%s.%s", table, indexName), "] dest_has:", has, "\ndest_idx:", dIdx, "\nsource_idx:", idx)
 		var alterSQLs []string
 		if has {
 			if idx.SQL != dIdx.SQL {
@@ -241,7 +238,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 		}
 		if len(alterSQLs) > 0 {
 			alterLines = append(alterLines, alterSQLs...)
-			logm.Println("[Debug] check index.alter ", fmt.Sprintf("%s.%s", table, indexName), "alterSQL=", alterSQLs)
+			log.Println("[Debug] check index.alter ", fmt.Sprintf("%s.%s", table, indexName), "alterSQL=", alterSQLs)
 		} else {
 			log.Println("[Debug] check index.alter ", fmt.Sprintf("%s.%s", table, indexName), "not change")
 		}
@@ -261,7 +258,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 
 			if dropSQL != "" {
 				alterLines = append(alterLines, dropSQL)
-				logm.Println("[Debug] check index.drop ", fmt.Sprintf("%s.%s", table, indexName), "alterSQL=", dropSQL)
+				log.Println("[Debug] check index.drop ", fmt.Sprintf("%s.%s", table, indexName), "alterSQL=", dropSQL)
 			} else {
 				log.Println("[Debug] check index.drop ", fmt.Sprintf("%s.%s", table, indexName), " not change")
 			}
@@ -275,7 +272,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 			continue
 		}
 		dIdx, has := destMyS.ForeignAll[foreignName]
-		//logm.Println("[Debug] foreignName---->[", fmt.Sprintf("%s.%s", table, foreignName), "] dest_has:", has, "\ndest_idx:", dIdx, "\nsource_idx:", idx)
+		log.Println("[Debug] foreignName---->[", fmt.Sprintf("%s.%s", table, foreignName), "] dest_has:", has, "\ndest_idx:", dIdx, "\nsource_idx:", idx)
 		var alterSQLs []string
 		if has {
 			if idx.SQL != dIdx.SQL {
@@ -286,7 +283,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 		}
 		if len(alterSQLs) > 0 {
 			alterLines = append(alterLines, alterSQLs...)
-			logm.Println("[Debug] check foreignKey.alter ", fmt.Sprintf("%s.%s", table, foreignName), "alterSQL=", alterSQLs)
+			log.Println("[Debug] check foreignKey.alter ", fmt.Sprintf("%s.%s", table, foreignName), "alterSQL=", alterSQLs)
 		} else {
 			log.Println("[Debug] check foreignKey.alter ", fmt.Sprintf("%s.%s", table, foreignName), "not change")
 		}
@@ -307,7 +304,7 @@ func (sc *SchemaSync) getSchemaDiff(alter *TableAlterData) []string {
 			}
 			if dropSQL != "" {
 				alterLines = append(alterLines, dropSQL)
-				logm.Println("[Debug] check foreignKey.drop ", fmt.Sprintf("%s.%s", table, foreignName), "alterSQL=", dropSQL)
+				log.Println("[Debug] check foreignKey.drop ", fmt.Sprintf("%s.%s", table, foreignName), "alterSQL=", dropSQL)
 			} else {
 				log.Println("[Debug] check foreignKey.drop ", fmt.Sprintf("%s.%s", table, foreignName), "not change")
 			}
@@ -371,8 +368,8 @@ func CheckSchemaDiffStart(cfg *Config) {
 	sc.GetDatabase(cfg)
 
 	//生成的sql文件中,开始位置添加database名称
-	fmtm.Println("-- Database")
-	fmtm.Println("use `" + sc.DestDb.dbName + "`;")
+	fmt.Println("-- Database")
+	fmt.Printf("use `%s`;\n", sc.DestDb.dbName)
 
 	//对比表[table]
 	CheckSchemaDiff(scs, cfg, sc, TYPE_TABLE)
@@ -408,10 +405,10 @@ func CheckSchemaDiff(scs *statics, cfg *Config, sc *SchemaSync, tType string) {
 			continue
 		}
 
-		//if sd.Type == alterTypeDropTable {
-		//	log.Println("skipped table", table, ",only exists in dest's db")
-		//	continue
-		//}
+		if sd.Type == alterTypeDropTable {
+			log.Println("skipped table", table, ",only exists in dest's db")
+			continue
+		}
 
 		//sql中添加database名称
 		var sqls []string
@@ -422,7 +419,8 @@ func CheckSchemaDiff(scs *statics, cfg *Config, sc *SchemaSync, tType string) {
 		sd.SQL = sqls
 
 		//打印sql
-		fmtm.Println(sd)
+		fmt.Println(sd)
+		fmt.Println("")
 		relationTables := sd.SchemaDiff.RelationTables()
 		// fmt.Println("relationTables:",table,relationTables)
 
@@ -448,7 +446,7 @@ run_sync:
 		if !strings.HasPrefix(typeName, canRunTypePref) {
 			continue
 		}
-		//log.Println("runSyncType:", typeName)
+		log.Println("runSyncType:", typeName)
 		var sqls []string
 		var sts []*tableStatics
 		for _, sd := range sds {
