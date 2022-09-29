@@ -29,6 +29,8 @@ go build -o mysql-schema-sync main.go
 ### 安装
 ```bash
 go install github.com/hidu/mysql-schema-sync@master
+#手动替换新的
+/root/go/bin/mysql-schema-sync
 ```
 
 

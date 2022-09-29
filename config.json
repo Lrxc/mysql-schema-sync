@@ -1,5 +1,5 @@
 {
-     "source":"root:9784!2d155#74aea@(10.41.224.105:10000)/test",
+     "source":"root:123456@(10.41.224.71:3310)/test",
      "dest":"root:root@(10.41.224.71:3306)/test",
      "alter_ignore":{
         "tb1*":{

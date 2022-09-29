@@ -47,7 +47,7 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 	//如果db库已经被删除
 	if len(sourceSql) == 0 && len(descSql) != 0 {
 		sql := "DROP DATABASE IF EXISTS " + sc.DestDb.dbName
-		fmt.Println("-- Create Database")
+		fmt.Println("-- Drop Database")
 		fmt.Printf("%s;\n\n", sql)
 		//执行删除db语句
 		sc.SyncSQL4Dest(sql, nil)
@@ -56,7 +56,7 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 	}
 	//如果db库是新增
 	if len(sourceSql) != 0 && len(descSql) == 0 {
-		//重新连接 mysql 系统数据库,用于创建新db库
+		//重新连接 mysql 系统数据库(当前db不存在,无法直接创建),用于创建新db库
 		sc.DestDb = NewMyDb(strings.Replace(config.DestDSN, sc.DestDb.dbName, "mysql", -1), "dest")
 
 		sourceSql = strings.Replace(sourceSql, "CREATE DATABASE", "CREATE DATABASE IF NOT EXISTS", -1)
@@ -69,6 +69,12 @@ func (sc *SchemaSync) GetDatabase(config *Config) {
 		}
 		//创建成功后,改回默认数据库
 		sc.DestDb = NewMyDb(config.DestDSN, "dest")
+	}
+	//如果db库都存在,也要打印建db语句
+	if len(sourceSql) != 0 && len(descSql) != 0 {
+		sourceSql = strings.Replace(sourceSql, "CREATE DATABASE", "CREATE DATABASE IF NOT EXISTS", -1)
+		fmt.Println("-- Create Database")
+		fmt.Printf("%s;\n\n", sourceSql)
 	}
 }
 
@@ -413,7 +419,7 @@ func CheckSchemaDiff(scs *statics, cfg *Config, sc *SchemaSync, tType string) {
 		//sql中添加database名称
 		var sqls []string
 		for _, sql := range sd.SQL {
-			sql := strings.Replace(sql, "`"+table+"`", sc.DestDb.dbName+".`"+table+"`", -1)
+			sql := strings.Replace(sql, "`"+table+"`", "`"+sc.DestDb.dbName+"`.`"+table+"`", -1)
 			sqls = append(sqls, sql)
 		}
 		sd.SQL = sqls
