@@ -152,7 +152,7 @@ func (sc *SchemaSync) getAlterDataByTable(table string, cfg *Config, tType strin
 	return alter
 }
 
-//针对 NOT NULL DEFAULT 情况,需要先update数据才行
+// 针对 NOT NULL DEFAULT 情况,需要先update数据才行
 func addUpdate(dbName string, table string, sql string) (upSql string) {
 	//是否包含特定内容
 	matched, _ := regexp.MatchString("CHANGE .* NOT NULL DEFAULT .*", sql)
@@ -411,7 +411,7 @@ func CheckSchemaDiff(scs *statics, cfg *Config, sc *SchemaSync, tType string) {
 			continue
 		}
 
-		if sd.Type == alterTypeDropTable {
+		if sd.Type == alterTypeDropTable && !sc.Config.Drop {
 			log.Println("skipped table", table, ",only exists in dest's db")
 			continue
 		}

@@ -1,6 +1,6 @@
 {
-     "source":"root:123456@(10.41.224.71:3310)/test",
-     "dest":"root:root@(10.41.224.71:3306)/test",
+     "source":"root:root@(192.168.1.120:3308)/test",
+     "dest":"root:root@(192.168.1.120:3309)/test",
      "alter_ignore":{
         "tb1*":{
             "column":["aaa","a*"],

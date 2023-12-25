@@ -30,6 +30,11 @@ func NewMyDb(dsn string, dbType string) *MyDb {
 	if err != nil {
 		panic(fmt.Sprintf("connected to db [%s] failed,err=%s", dsn, err))
 	}
+	err = db.Ping()
+	if err != nil {
+		panic(fmt.Sprintf("connected to db [%s] failed,err=%s", dsn, err))
+	}
+
 	return &MyDb{
 		Db:     db,
 		dbType: dbType,
