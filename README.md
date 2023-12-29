@@ -17,6 +17,7 @@ MySQL Schema 自动同步工具
 10. 支持创建建Database库
 11. 支持视图View同步
 12. 针对 NOT NULL DEFAULT 情况,需要先UPDATE数据才行
+13. 支持同步数据
 
 ### 手动打包
 ```bash
@@ -24,6 +25,12 @@ MySQL Schema 自动同步工具
 set GOARCH=amd64
 set GOOS=linux
 go build -o mysql-schema-sync main.go
+```
+
+powershell
+```powershell
+$ENV:GOOS="linux"
+$ENV:GOARCH="amd64"
 ```
 
 ### 安装
@@ -79,6 +86,9 @@ single_schema_change：是否每个ddl只执行单个修改
 ### 直接运行
 ```
 mysql-schema-sync -conf mydb_conf.json -sync
+
+#无config配置
+mysql-schema-sync -source="root:root@(192.168.2.128:3308)/test" -dest="root:root@(192.168.2.128:3309)/test" -drop -data 2>/dev/null >sql.sql
 ```
  
 ### 预览并生成变更sql
@@ -119,6 +129,8 @@ mysql-schema-sync [-conf] [-dest] [-source] [-sync] [-drop]
         mysql 同步源,eg test@(127.0.0.1:3306)/test_0
   -sync
         是否将修改同步到数据库中去，默认否
+  -data
+        是否同步数据,默认否(必须保证表结构一致,可打开 -sync)
   -tables string
         待检查同步的数据库表，为空则是全部
         eg : product_base,order_*
