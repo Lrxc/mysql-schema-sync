@@ -364,7 +364,6 @@ func (sc *SchemaSync) SyncSQL4Dest(sqlStr string, sqls []string) error {
 func CheckSchemaDiffStart(cfg *Config) {
 	scs := newStatics(cfg)
 	defer func() {
-		fmt.Println("系统异常")
 		scs.timer.stop()
 		scs.sendMailNotice(cfg)
 	}()
