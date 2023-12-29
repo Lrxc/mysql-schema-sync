@@ -54,10 +54,21 @@ func CheckDataDiff(scs *statics, cfg *Config, sc *SchemaSync, tType string) {
 					d2 = result2[i]
 				}
 
+				var sqls []string
 				if primaryKey != "" {
-					compareDiffByPrimary(table, primaryKey, d1, d2)
+					sqls = compareByPrimary(table, primaryKey, d1, d2)
 				} else {
-					compareDiffNoPrimary(table, d1, d2)
+					sqls = compareNoPrimary(table, d1, d2)
+				}
+
+				//执行sql
+				if sc.Config.Sync {
+					for _, sql := range sqls {
+						err := sc.SyncSQL4Dest(sql, nil)
+						if err != nil {
+							fmt.Println(err)
+						}
+					}
 				}
 			}
 		}
@@ -86,7 +97,10 @@ func count(a, b int) int {
 }
 
 // 无主键
-func compareDiffNoPrimary(table string, d1, d2 map[string]string) {
+func compareNoPrimary(table string, d1, d2 map[string]string) []string {
+	var sql []string
+	var sql1, sql2 string
+
 	//alter
 	if d1 != nil && d2 != nil {
 		//先删除
@@ -94,7 +108,7 @@ func compareDiffNoPrimary(table string, d1, d2 map[string]string) {
 		for k, v := range d1 {
 			columns = append(columns, k+"="+v)
 		}
-		fmt.Printf("DELETE FROM %s WHERE %s;\n", table, strings.Join(columns, " and "))
+		sql1 = fmt.Sprintf("DELETE FROM %s WHERE %s;\n", table, strings.Join(columns, " and "))
 
 		//再插入新的
 		for k, v := range d2 {
@@ -102,7 +116,7 @@ func compareDiffNoPrimary(table string, d1, d2 map[string]string) {
 			values = append(values, v)
 		}
 
-		fmt.Printf("INSERT INTO %s(%s) VALUES (%s);\n", table, strings.Join(columns, ","), strings.Join(values, ","))
+		sql2 = fmt.Sprintf("INSERT INTO %s(%s) VALUES (%s);\n", table, strings.Join(columns, ","), strings.Join(values, ","))
 	}
 
 	//delete
@@ -111,7 +125,7 @@ func compareDiffNoPrimary(table string, d1, d2 map[string]string) {
 		for k, v := range d1 {
 			row = append(row, k+"="+v)
 		}
-		fmt.Printf("DELETE FROM %s WHERE %s;\n", table, strings.Join(row, " and "))
+		sql1 = fmt.Sprintf("DELETE FROM %s WHERE %s;\n", table, strings.Join(row, " and "))
 	}
 
 	//insert
@@ -120,31 +134,38 @@ func compareDiffNoPrimary(table string, d1, d2 map[string]string) {
 		for _, v := range d2 {
 			row = append(row, v)
 		}
-		fmt.Printf("INSERT INTO %s VALUES (%s);\n", table, strings.Join(row, ","))
+		sql1 = fmt.Sprintf("INSERT INTO %s VALUES (%s);\n", table, strings.Join(row, ","))
 	}
+
+	sql = append(sql, sql1)
+	sql = append(sql, sql2)
+	return sql
 }
 
 // 有主键
-func compareDiffByPrimary(table, primaryKey string, d1, d2 map[string]string) {
+func compareByPrimary(table, primaryKey string, d1, d2 map[string]string) []string {
+	var sql []string
+	var sql1, sql2 string
+
 	//alter
 	if d1 != nil && d2 != nil {
 		id := d1[primaryKey]
 
 		//先删除
-		fmt.Printf("DELETE FROM %s WHERE id = '%s';\n", table, id)
+		sql1 = fmt.Sprintf("DELETE FROM %s WHERE id = '%s';\n", table, id)
 
 		var columns, values []string
 		for k, v := range d2 {
 			columns = append(columns, k)
 			values = append(values, v)
 		}
-		fmt.Printf("INSERT INTO %s(%s) VALUES (%s);\n", table, strings.Join(columns, ","), strings.Join(values, ","))
+		sql2 = fmt.Sprintf("INSERT INTO %s(%s) VALUES (%s);\n", table, strings.Join(columns, ","), strings.Join(values, ","))
 	}
 
 	//delete
 	if d1 != nil && d2 == nil {
 		id := d1[primaryKey]
-		fmt.Printf("DELETE FROM %s WHERE id = '%s';\n", table, id)
+		sql1 = fmt.Sprintf("DELETE FROM %s WHERE id = '%s';\n", table, id)
 	}
 
 	//insert
@@ -153,8 +174,12 @@ func compareDiffByPrimary(table, primaryKey string, d1, d2 map[string]string) {
 		for _, v := range d2 {
 			row = append(row, v)
 		}
-		fmt.Printf("INSERT INTO %s VALUES (%s);\n", table, strings.Join(row, ","))
+		sql1 = fmt.Sprintf("INSERT INTO %s VALUES (%s);\n", table, strings.Join(row, ","))
 	}
+
+	sql = append(sql, sql1)
+	sql = append(sql, sql2)
+	return sql
 }
 
 // 遍历结果
